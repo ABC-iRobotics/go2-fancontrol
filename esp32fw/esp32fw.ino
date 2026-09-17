@@ -76,6 +76,15 @@ static void setFanSpeed(const uint8_t percent) {
 
 void setup() {
   Serial.begin(115200);
+#if ARDUINO_USB_CDC_ON_BOOT
+  // Serial is the native USB CDC port here, which only exists once the host
+  // opens it. Wait briefly so the boot messages below are not lost, then stop
+  // blocking on writes for when no serial monitor is attached.
+  while (!Serial && millis() < 3000) {
+    delay(10);
+  }
+  Serial.setTxTimeoutMs(0);
+#endif
   BLEDevice::init(DEVICE_NAME);
   pServer = BLEDevice::createServer();
   // Not the default: without this, advertising stops for good once a client

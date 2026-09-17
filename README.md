@@ -26,3 +26,11 @@ https://github.com/matmunk/DS18B20
 
 jetson fan header: W: 3.96mm, mélység: 1.3mm, raster: 0.8mm
 JST SUR 4pin
+
+## Arduino, Usage notes
+
+Run ardiono IDE with --no-sandbox cli option.
+
+Enable USB CDC On boot to use USB serial by default & rebuild, upload
+
+BLE device MAC: 10:00:3B:AF:09:36

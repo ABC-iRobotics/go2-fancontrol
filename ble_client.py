@@ -14,7 +14,7 @@ import sys
 
 from bleak import BleakClient, BleakScanner
 
-DEVICE_NAME = "MyESP32"
+DEVICE_NAME = "go2fan"
 CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 COMPANY_ID = 0xFFFF
 
