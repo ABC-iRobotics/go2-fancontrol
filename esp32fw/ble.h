@@ -8,6 +8,14 @@
 
 #define DEVICE_NAME "go2fan"
 
+// The BLE address this board advertises with, as "AA:BB:CC:DD:EE:FF" (the
+// separators are optional). Every board answers to the same DEVICE_NAME, and
+// stock modules out of the same batch can carry the same factory address too,
+// which leaves a client with nothing to tell two of them apart; give each board
+// its own here. An empty string keeps whatever address the factory programmed.
+//   Go2 Jetson unit:        10:00:3B:AF:5D:A2
+#define BLE_MAC "10:00:3B:AF:5D:A3"
+
 #define ADV_UPDATE_MS 1000
 
 // A write to the characteristic carries one command line, which is handed to

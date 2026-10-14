@@ -1,0 +1,37 @@
+{
+  "configById": {
+    "Plot!35gbees": {
+      "paths": [
+        {
+          "value": "/go2fan.temperature_c",
+          "enabled": true,
+          "timestampMethod": "receiveTime",
+          "color": "#4e98e2",
+          "id": "f5a09ff8-8568-49e6-87dd-aa7baa83ae7c",
+          "label": "temp"
+        },
+        {
+          "value": "/go2fan.fan_percent",
+          "enabled": true,
+          "timestampMethod": "receiveTime",
+          "color": "#f5774d",
+          "id": "29480f4d-6be8-4ceb-947b-7c16f4961a4e",
+          "yAxisId": "27485a2f-9e0f-4933-9b6d-e4047b902ede",
+          "label": "fan"
+        }
+      ],
+      "secondaryAxes": [
+        {
+          "id": "27485a2f-9e0f-4933-9b6d-e4047b902ede"
+        }
+      ],
+      "yAxisLabel": "temp"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": "Plot!35gbees"
+}
