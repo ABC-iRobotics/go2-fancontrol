@@ -15,7 +15,8 @@
 // its own here. An empty string keeps whatever address the factory programmed.
 //   Go2 Jetson unit:    10:00:3B:AF:5D:A2
 //   POC unit:           10:00:3B:AF:5D:A3
-#define BLE_MAC "10:00:3B:AF:5D:A2"
+//   Go2 Body unit:      10:00:3B:AF:5D:A4
+#define BLE_MAC "10:00:3B:AF:5D:A4"
 
 #define ADV_UPDATE_MS 1000
 

@@ -31,11 +31,11 @@
 
 // --- tuning ---------------------------------------------------------------
 
-#define TEMP_SETPOINT       48.0f   // degC the controller maintains at power-on
+#define TEMP_SETPOINT       46.0f   // degC the controller maintains at power-on
 #define TM_SETPOINT_MIN     20.0f   // range setThermalSetpoint() accepts
 #define TM_SETPOINT_MAX     90.0f
-#define SAFE_START_DUTY     75      // % duty the fan reliably starts spinning at
-#define TM_MIN_RUN_DUTY     12      // % lowest duty it keeps spinning at once started
+#define SAFE_START_DUTY     65      // % duty the fan reliably starts spinning at
+#define TM_MIN_RUN_DUTY     15      // % lowest duty it keeps spinning at once started
 #define TM_MAX_DUTY         100     // % upper end of the control range
 
 #define TM_KP               6.0f    // %/degC

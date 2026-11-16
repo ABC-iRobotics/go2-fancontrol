@@ -26,7 +26,7 @@ jetson fan | 4010 12V dual ball bearing blower | 1 | [aliexpress](https://www.al
 ## PCB assembly
 
 You can find the schematic at [doc folder](doc/schematic.pdf), drawn with drawio.  
-PCB assembly photos for jetson variant photos at [doc/jetson_board_imgs](doc/jetson_board_imgs/).
+PCB assembly photos for jetson variant at [doc/jetson_board_imgs](doc/jetson_board_imgs/).
 
 ## FAN PWM filter performance
 There is a tuned LC filter on the FET output to reduce audible noise and EM radiation.
@@ -52,7 +52,8 @@ FAN database:
 name | start duty% | spin floor duty%
 ----- | -------   | -------------------
 Jetson stock | 30 | 25
-Ali 40x40 dual ball 12V | 75 | 12
+Ali 40x40 dual ball 12V | 75 | 15
+Ali 30x30 dual ball 12V | 65 | 15
 
 
 ### Picking a device
@@ -81,6 +82,7 @@ unit | BLE MAC
 --- | ---
 POC | 10:00:3B:AF:5D:A3
 Go2 Jetson | 10:00:3B:AF:5D:A2
+Go2 Body | 10:00:3B:AF:5D:A4
 
 ### Thermal management (esp32fw/tm.h)
 
