@@ -8,6 +8,7 @@ Usage:
   ./ble_client.py scan                 # show the advertised fan/temperature data
   ./ble_client.py scan --log [FILE]    # ...and log it to an MCAP file for Foxglove
   ./ble_client.py scan --loglive       # ...and serve it live to the Foxglove app
+  ./ble_client.py --mon                # live table of all units, redrawn in place
   ./ble_client.py read                 # read the characteristic
   ./ble_client.py write "some string"  # write it, then read it back
 
@@ -35,11 +36,16 @@ DEVICE_NAME = "go2fan"
 # DEVICE_NAME, so the MAC address is what tells them apart. None means the first
 # one that turns up, which is what a single-device setup wants. Override it per
 # command with --address, for a whole shell with GO2FAN_ADDRESS, or permanently
-# by filling this in.
-#   Go2 mainboard unit: 10:00:3B:AF:09:36 (the stock one)
-#   Jetson unit:        10:00:3B:AF:5D:A2
+# by filling this in. The deployed units are listed in UNITS below.
 DEFAULT_ADDRESS = None
 ADDRESS_ENV = "GO2FAN_ADDRESS"
+
+# The deployed units: MAC address -> the module it sits in. The monitor lists
+# these always, in this order, and anything else it hears below them.
+UNITS = {
+    "10:00:3B:AF:5D:A2": "Go2 jetson",
+    "10:00:3B:AF:5D:A4": "Go2 body",
+}
 
 CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 COMPANY_ID = 0xFFFF
@@ -211,6 +217,108 @@ class LiveLogger:
         self._server.stop()
 
 
+def unit_name(address):
+    """The module a unit is deployed in, from UNITS, or None if unknown."""
+    wanted = normalize_address(address)
+    for mac, name in UNITS.items():
+        if normalize_address(mac) == wanted:
+            return name
+    return None
+
+
+class Monitor:
+    """A fixed full-screen table of every unit heard, redrawn in place.
+
+    One row per unit: the deployed ones from UNITS first (even before they are
+    heard), then any other go2fan in order of first appearance. Age is how long
+    ago the last advertisement from that unit arrived, so it keeps counting up
+    between redraws while a unit is silent.
+    """
+
+    REFRESH_S = 0.1
+    STATUS_LINES = 4
+
+    def __init__(self, address=None):
+        self.address = address
+        # normalized MAC -> {"address", "name", "temp", "fan", "rssi", "seen", "count"}
+        self.rows = {}
+        for mac, name in UNITS.items():
+            if matches_address(mac, address):
+                self._row(mac, name)
+        self.status = []
+        self.started = time.monotonic()
+
+    def _row(self, mac, name=None):
+        key = normalize_address(mac)
+        if key not in self.rows:
+            self.rows[key] = {
+                "address": mac.upper(),
+                "name": name or unit_name(mac) or "?",
+                "temp": None,
+                "fan": None,
+                "rssi": None,
+                "seen": None,
+                "count": 0,
+            }
+        return self.rows[key]
+
+    def update(self, mac, temperature, fan, rssi):
+        row = self._row(mac)
+        row["temp"], row["fan"], row["rssi"] = temperature, fan, rssi
+        row["seen"] = time.monotonic()
+        row["count"] += 1
+
+    def note(self, text):
+        """A message for the status area under the table, newest last."""
+        self.status = (self.status + [text])[-self.STATUS_LINES :]
+
+    def render(self):
+        now = time.monotonic()
+        lines = [
+            f"{DEVICE_NAME} monitor"
+            f"{f' ({self.address})' if self.address else ''}"
+            f"   up {now - self.started:7.1f} s   Ctrl-C to stop",
+            "",
+            f"{'NAME':<16} {'MAC':<17} {'TEMP':>8} {'FAN':>6} "
+            f"{'RSSI':>5} {'AGE ms':>9} {'ADVS':>7}",
+            "-" * 74,
+        ]
+        for row in self.rows.values():
+            temp = f"{row['temp']:.1f} C" if row["temp"] is not None else "-"
+            fan = f"{row['fan']:.0f} %" if row["fan"] is not None else "-"
+            rssi = f"{row['rssi']}" if row["rssi"] is not None else "-"
+            if row["seen"] is None:
+                age = "never"
+            else:
+                age = f"{(now - row['seen']) * 1000:.0f}"
+            lines.append(
+                f"{row['name'][:16]:<16} {row['address']:<17} {temp:>8} {fan:>6} "
+                f"{rssi:>5} {age:>9} {row['count']:>7}"
+            )
+        lines.append("")
+        lines.extend(self.status)
+        # Home the cursor and overwrite each line, clearing its tail and then
+        # everything below, so nothing scrolls and nothing flickers.
+        out = "\x1b[H" + "".join(f"{line}\x1b[K\n" for line in lines) + "\x1b[J"
+        sys.stdout.write(out)
+        sys.stdout.flush()
+
+    def __enter__(self):
+        # Alternate screen, cursor hidden: the shell's scrollback is left as it was.
+        sys.stdout.write("\x1b[?1049h\x1b[?25l\x1b[2J")
+        sys.stdout.flush()
+        return self
+
+    def __exit__(self, *exc):
+        sys.stdout.write("\x1b[?25h\x1b[?1049l")
+        sys.stdout.flush()
+
+    async def run(self):
+        while True:
+            self.render()
+            await asyncio.sleep(self.REFRESH_S)
+
+
 async def find_device(address=None):
     """The go2fan at the given address, or any go2fan if no address is given."""
 
@@ -225,7 +333,9 @@ async def find_device(address=None):
     return device
 
 
-async def scan(address=None, log_path=None, logging_on=False, live_port=None):
+async def scan(
+    address=None, log_path=None, logging_on=False, live_port=None, monitor=False
+):
     """Print the manufacturer-data string from each advertisement, no connection.
 
     With an address only that unit is shown, which is what keeps two concurrent
@@ -233,12 +343,16 @@ async def scan(address=None, log_path=None, logging_on=False, live_port=None):
     file every LOG_INTERVAL_S;
     log_path of None means one is named after the device and the date. With
     live_port the same datapoints are also served to the Foxglove app. Both
-    sinks can run at once.
+    sinks can run at once. With monitor the advertisements are not printed one
+    per line but shown in a table redrawn in place, one row per unit.
     """
+    mon = Monitor(address) if monitor else None
+    say = mon.note if mon is not None else print
+
     live = LiveLogger(live_port) if live_port is not None else None
     if live is not None:
-        print(f"live: serving on ws://127.0.0.1:{live.port}")
-        print(f"      open {live.url}")
+        say(f"live: serving on ws://127.0.0.1:{live.port}")
+        say(f"      open {live.url}")
 
     state = {"file": None, "bound": False, "last": 0.0}
 
@@ -263,7 +377,7 @@ async def scan(address=None, log_path=None, logging_on=False, live_port=None):
                         DEVICE_NAME, device.address
                     )
                     state["file"] = AdvLogger(path, DEVICE_NAME, device.address)
-                    print(f"logging to {path}")
+                    say(f"logging to {path}")
                 if live is not None:
                     live.bind(DEVICE_NAME, device.address)
                 state["bound"] = True
@@ -274,16 +388,23 @@ async def scan(address=None, log_path=None, logging_on=False, live_port=None):
                 live.log(sample)
             state["last"] = time.monotonic()
 
+        if mon is not None:
+            mon.update(device.address, *parse_adv(text), adv.rssi)
+            return
         prefix = "(logging) " if due else ""
         print(f"{prefix}{device.address}  rssi={adv.rssi:4d}  {text}")
 
     try:
         async with BleakScanner(callback):
-            print(
-                f"Scanning for {DEVICE_NAME}"
-                f"{f' at {address}' if address else ''}, Ctrl-C to stop..."
-            )
-            await asyncio.Event().wait()
+            if mon is not None:
+                with mon:
+                    await mon.run()
+            else:
+                print(
+                    f"Scanning for {DEVICE_NAME}"
+                    f"{f' at {address}' if address else ''}, Ctrl-C to stop..."
+                )
+                await asyncio.Event().wait()
     finally:
         if state["file"] is not None:
             state["file"].close()
@@ -380,13 +501,25 @@ def main():
         help=f"serve samples live to the Foxglove app over a WebSocket "
         f"on PORT (default {LIVE_PORT})",
     )
+    p_scan.add_argument(
+        "--mon",
+        action="store_true",
+        help="monitor: a table of every unit (name from the unit database, "
+        "temperature, fan speed, age of the last advertisement) redrawn in place",
+    )
     sub.add_parser("read", parents=[common], help="read the characteristic")
     p_write = sub.add_parser(
         "write", parents=[common], help="write the characteristic, read it back"
     )
     p_write.add_argument("text")
 
-    args = parser.parse_args(sys.argv[1:] or ["scan"])
+    # No sub-command means scan, so "./ble_client.py --mon" works on its own.
+    argv = sys.argv[1:]
+    if not any(arg in sub.choices for arg in argv) and not (
+        {"-h", "--help"} & set(argv)
+    ):
+        argv = ["scan"] + argv
+    args = parser.parse_args(argv)
     address = (
         getattr(args, "address", None) or os.environ.get(ADDRESS_ENV) or DEFAULT_ADDRESS
     )
@@ -403,6 +536,7 @@ def main():
                 log_path=log or None,
                 logging_on=log is not None,
                 live_port=getattr(args, "loglive", None),
+                monitor=getattr(args, "mon", False),
             )
         )
 
